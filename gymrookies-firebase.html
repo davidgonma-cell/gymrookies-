@@ -37,36 +37,46 @@ if(typeof Element!=='undefined'&&!Element.prototype.classList){Object.defineProp
 (function(){var _store={};try{localStorage.setItem('__t','1');localStorage.removeItem('__t');}catch(e){window.localStorage={getItem:function(k){return _store[k]||null;},setItem:function(k,v){_store[k]=String(v);},removeItem:function(k){delete _store[k];},clear:function(){_store={};}};}}());
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
-<!-- Firebase SDK (compat version — sin módulos, compatible con cualquier navegador) -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<!-- Firebase SDK (compat version — compatible con cualquier navegador) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
-(function(){
-  var firebaseConfig = {
-    apiKey: "AIzaSyC462-iYp5nev2tsmrsfaECJcKIO9NXq9A",
-    authDomain: "gymrookies-95851.firebaseapp.com",
-    projectId: "gymrookies-95851",
-    storageBucket: "gymrookies-95851.firebasestorage.app",
-    messagingSenderId: "755581455312",
-    appId: "1:755581455312:web:aa28f06d79413db68747d5"
-  };
+// Inicializar Firebase tras cargar los SDKs
+window._currentFbUid = null;
+window._fbReady = false;
+window._fbSaveData = null;
+window._fbLoadData = null;
+window._fbSignUp = null;
+window._fbSignIn = null;
+window._fbSignOut = null;
+
+function _initFirebase(){
   try {
-    firebase.initializeApp(firebaseConfig);
+    var firebaseConfig = {
+      apiKey: "AIzaSyC462-iYp5nev2tsmrsfaECJcKIO9NXq9A",
+      authDomain: "gymrookies-95851.firebaseapp.com",
+      projectId: "gymrookies-95851",
+      storageBucket: "gymrookies-95851.firebasestorage.app",
+      messagingSenderId: "755581455312",
+      appId: "1:755581455312:web:aa28f06d79413db68747d5"
+    };
+
+    if(typeof firebase === 'undefined') { console.warn('Firebase SDK no disponible'); return; }
+
+    var fbApp = firebase.initializeApp(firebaseConfig);
     var _auth = firebase.auth();
     var _db   = firebase.firestore();
 
-    window._currentFbUid = null;
-    window._fbReady = false;
-
-    // ── Guardar datos en Firestore (dividido en 3 docs para evitar límite 1MB) ──
+    // ── Guardar en Firestore (3 documentos para evitar límite 1MB) ──
     window._fbSaveData = function(uid, data) {
       if(!uid) return;
       try {
-        var d = JSON.parse(JSON.stringify(data)); // copia limpia
+        var d = JSON.parse(JSON.stringify(data));
         var p1 = {user:d.user||null, appStart:d.appStart||null, week:d.week||1,
           routine:d.routine||null, macros:d.macros||null, tdee:d.tdee||null,
-          streak:d.streak||0, restConf:d.restConf||90, rmLog:d.rmLog||{}, pro:d.pro||null};
+          streak:d.streak||0, restConf:d.restConf||90, rmLog:d.rmLog||{},
+          pro:d.pro||null, rutinaActiva:d.rutinaActiva||'normal'};
         var p2 = {setsLog:d.setsLog||{}, weightUsed:d.weightUsed||{},
           trainLog:d.trainLog||{}, macroLog:d.macroLog||{}, stepsLog:d.stepsLog||{},
           bodyLog:d.bodyLog||[], savedMeals:d.savedMeals||[], normalWeekHist:d.normalWeekHist||{}};
@@ -74,56 +84,51 @@ if(typeof Element!=='undefined'&&!Element.prototype.classList){Object.defineProp
           proTrainLog:d.proTrainLog||{}, proSessionHist:d.proSessionHist||[],
           mastLog:d.mastLog||{}, mastWeights:d.mastWeights||{}, mastTrainLog:d.mastTrainLog||{},
           mastHist:d.mastHist||{}, mastWeekHist:d.mastWeekHist||{}};
-        _db.collection('users').doc(uid).set(p1);
-        _db.collection('users_logs').doc(uid).set(p2);
-        _db.collection('users_mast').doc(uid).set(p3);
+        _db.collection('users').doc(uid).set(p1).catch(function(e){console.warn('FB p1 error',e);});
+        _db.collection('users_logs').doc(uid).set(p2).catch(function(e){console.warn('FB p2 error',e);});
+        _db.collection('users_mast').doc(uid).set(p3).catch(function(e){console.warn('FB p3 error',e);});
       } catch(e){ console.warn('FB save error',e); }
     };
 
-    // ── Cargar datos desde Firestore ──
+    // ── Cargar desde Firestore ──
     window._fbLoadData = function(uid, callback) {
       if(!uid){callback(null);return;}
-      _db.collection('users').doc(uid).get().then(function(snap){
-        if(!snap.exists){callback(null);return;}
-        var data = snap.data();
-        var merged = Object.assign({}, data);
-        // Cargar los otros dos documentos en paralelo
-        Promise.all([
-          _db.collection('users_logs').doc(uid).get(),
-          _db.collection('users_mast').doc(uid).get()
-        ]).then(function(snaps){
-          snaps.forEach(function(s){ if(s.exists) Object.assign(merged, s.data()); });
-          callback(merged);
-        }).catch(function(){ callback(merged); });
-      }).catch(function(){ callback(null); });
+      _db.collection('users').doc(uid).get()
+        .then(function(snap){
+          if(!snap.exists){callback(null);return;}
+          var merged = snap.data();
+          Promise.all([
+            _db.collection('users_logs').doc(uid).get(),
+            _db.collection('users_mast').doc(uid).get()
+          ]).then(function(snaps){
+            snaps.forEach(function(s){ if(s.exists) Object.assign(merged, s.data()); });
+            callback(merged);
+          }).catch(function(){ callback(merged); });
+        })
+        .catch(function(e){ console.warn('FB load error',e); callback(null); });
     };
 
-    // ── Sign Up ──
+    // ── Auth ──
     window._fbSignUp = function(email, pw, onOk, onErr) {
       _auth.createUserWithEmailAndPassword(email, pw)
         .then(function(cred){ window._currentFbUid=cred.user.uid; onOk(cred.user); })
         .catch(function(e){ onErr(e); });
     };
-
-    // ── Sign In ──
     window._fbSignIn = function(email, pw, onOk, onErr) {
       _auth.signInWithEmailAndPassword(email, pw)
         .then(function(cred){ window._currentFbUid=cred.user.uid; onOk(cred.user); })
         .catch(function(e){ onErr(e); });
     };
-
-    // ── Sign Out ──
     window._fbSignOut = function() {
       window._currentFbUid = null;
       _auth.signOut().catch(function(){});
     };
 
-    // ── Observer de sesión — se ejecuta al cargar la página ──
+    // ── Observer sesión ──
     _auth.onAuthStateChanged(function(user){
       window._fbReady = true;
       if(user){
         window._currentFbUid = user.uid;
-        // Si la app aún no tiene datos locales, intentar cargar desde la nube
         if(typeof S !== 'undefined' && (!S.user || !S.user.name)){
           window._fbLoadData(user.uid, function(cloudData){
             if(cloudData && cloudData.user && cloudData.user.name){
@@ -132,7 +137,7 @@ if(typeof Element!=='undefined'&&!Element.prototype.classList){Object.defineProp
               if(typeof getWeekNum==='function') S.week=getWeekNum();
               if(typeof enterApp==='function') enterApp(false);
               if(typeof tab==='function') tab('resumen');
-              if(typeof renderHome==='function') setTimeout(renderHome,100);
+              if(typeof renderHome==='function') setTimeout(renderHome,150);
             }
           });
         }
@@ -141,10 +146,19 @@ if(typeof Element!=='undefined'&&!Element.prototype.classList){Object.defineProp
       }
     });
 
-    console.log('Firebase compat inicializado ✓');
-  } catch(e){ console.warn('Firebase init error:', e); }
-})();
+    window._fbReady = true;
+    console.log('Firebase OK ✓');
+  } catch(e){ console.warn('Firebase init error:', e.message); }
+}
+
+// Ejecutar cuando el DOM esté listo
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', _initFirebase);
+} else {
+  _initFirebase();
+}
 </script>
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 /* IE11 flex gap fallback */
@@ -592,16 +606,63 @@ body{
 <div id="onboarding-wrap" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;overflow:hidden">
 
   <!-- ── SCREEN 1: WELCOME ─────────────────────────────────────── -->
-  <div id="ob-welcome" style="display:flex;flex-direction:column;justify-content:space-between;height:100%;background:linear-gradient(160deg,#081C15 0%,#1B4332 55%,#0D2518 100%);padding:52px 28px 44px;color:#fff">
+  <div id="ob-welcome" style="display:flex;flex-direction:column;justify-content:space-between;height:100%;background:linear-gradient(160deg,#081C15 0%,#1B4332 55%,#0D2518 100%);padding:52px 28px 44px;color:#fff;overflow-y:auto">
     <div>
       <div style="font-size:10px;letter-spacing:6px;color:rgba(255,255,255,.4);margin-bottom:10px;font-weight:600;text-transform:uppercase">Bienvenido a</div>
       <div style="font-family:'Bebas Neue','Arial Narrow',Arial,sans-serif;font-size:64px;letter-spacing:4px;line-height:.88;color:#fff">GYM<br><span style="color:#E07020">ROOKIES</span></div>
       <div style="height:1px;background:rgba(255,255,255,.12);margin:28px 0"></div>
       <div style="font-size:17px;font-weight:600;color:rgba(255,255,255,.9);line-height:1.55;margin-bottom:10px">Tu guía de inicio al gimnasio. Desde cero.</div>
       <div style="font-size:14px;color:rgba(255,255,255,.55);line-height:1.75">Rutina personalizada · Control de pasos<br>Seguimiento de macros · Progresión automática</div>
+
+      <!-- DESPLEGABLE INSTALAR COMO APP -->
+      <div style="margin-top:24px">
+        <button onclick="(function(){var p=document.getElementById('install-panel');var a=document.getElementById('install-arr');var open=p.style.display==='block';p.style.display=open?'none':'block';a.textContent=open?'▼':'▲';})()" style="width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px 16px;color:rgba(255,255,255,.8);font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;touch-action:manipulation">
+          <span>📲 Instalar como app en tu móvil</span><span id="install-arr">▼</span>
+        </button>
+        <div id="install-panel" style="display:none;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-top:none;border-radius:0 0 12px 12px;padding:16px">
+
+          <!-- Chrome / Android -->
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:#E07020;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🟢 Chrome (Android)</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.65);line-height:1.7">
+              1. Toca los <strong style="color:#fff">tres puntos ⋮</strong> arriba a la derecha<br>
+              2. Toca <strong style="color:#fff">"Añadir a pantalla de inicio"</strong><br>
+              3. Ponle el nombre que quieras y toca <strong style="color:#fff">"Añadir"</strong><br>
+              ✅ Aparecerá un icono en tu escritorio como una app normal
+            </div>
+          </div>
+
+          <div style="height:1px;background:rgba(255,255,255,.08);margin-bottom:14px"></div>
+
+          <!-- Safari / iPhone -->
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:#E07020;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🍎 Safari (iPhone / iPad)</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.65);line-height:1.7">
+              1. Toca el icono de <strong style="color:#fff">compartir 〔⎋〕</strong> abajo en el centro<br>
+              2. Baja y toca <strong style="color:#fff">"Añadir a pantalla de inicio"</strong><br>
+              3. Ponle el nombre y toca <strong style="color:#fff">"Añadir"</strong><br>
+              ✅ Aparecerá en tu pantalla de inicio como una app
+            </div>
+          </div>
+
+          <div style="height:1px;background:rgba(255,255,255,.08);margin-bottom:10px"></div>
+
+          <!-- Samsung -->
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#E07020;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🔵 Samsung Internet</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.65);line-height:1.7">
+              1. Toca los <strong style="color:#fff">tres líneas ☰</strong> abajo a la derecha<br>
+              2. Toca <strong style="color:#fff">"Añadir página a"</strong> → <strong style="color:#fff">"Pantalla de inicio"</strong><br>
+              ✅ Lista como app en tu escritorio
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
-    <div>
-      <div style="font-size:10px;color:rgba(255,255,255,.3);text-align:center;margin-bottom:14px;font-weight:500">Web app gratuita · Sin instalación</div>
+
+    <div style="margin-top:24px">
+      <div style="font-size:10px;color:rgba(255,255,255,.3);text-align:center;margin-bottom:14px;font-weight:500">Web app gratuita · Sin instalación obligatoria</div>
       <button onclick="obGo('ob-how')" style="width:100%;padding:16px;background:#E07020;border:none;color:#fff;font-size:15px;font-weight:700;letter-spacing:.5px;border-radius:14px;cursor:pointer;touch-action:manipulation;box-shadow:0 4px 20px rgba(224,112,32,.4);margin-bottom:10px">Crear cuenta nueva →</button>
       <button onclick="obGo('ob-login')" style="width:100%;padding:14px;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.85);font-size:14px;font-weight:600;letter-spacing:.3px;border-radius:14px;cursor:pointer;touch-action:manipulation">Ya tengo cuenta · Iniciar sesión</button>
     </div>
@@ -1868,7 +1929,10 @@ body{
 
 <div id="scr-resumen" class="scr">
   <div class="rsh">
-    <span class="gr-brand">GYMROOKIES</span>
+    <div style="display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center">
+      <span class="gr-brand">GYMROOKIES</span>
+      <button id="sync-btn" onclick="syncDesdeNube()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;color:rgba(255,255,255,.7);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;touch-action:manipulation">☁️ Sync</button>
+    </div>
     <h2>RESUMEN</h2>
     <div style="font-size:10px;color:rgba(255,255,255,.4);font-weight:500" id="rs-wl"></div>
   </div>
@@ -1876,7 +1940,15 @@ body{
 
     <!-- 1. Estado general -->
     <div class="card" id="rs-estado-card">
-      <div class="ct">Estado semanal</div>
+      <div style="display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;margin-bottom:8px">
+        <div class="ct" style="margin-bottom:0">Estado semanal</div>
+        <!-- Selector rutina activa -->
+        <div style="display:flex;gap:4px">
+          <button id="ra-btn-normal" onclick="setRutinaActiva('normal')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--acc);background:var(--acc);color:#fff;touch-action:manipulation">Normal</button>
+          <button id="ra-btn-pro" onclick="setRutinaActiva('pro')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--brd);background:var(--sfc);color:var(--muted);touch-action:manipulation">Pro</button>
+          <button id="ra-btn-master" onclick="setRutinaActiva('master')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--brd);background:var(--sfc);color:var(--muted);touch-action:manipulation">Máster</button>
+        </div>
+      </div>
       <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:12px;margin-bottom:8px">
         <div id="rs-pct-circle" style="width:56px;height:56px;border-radius:50%;background:conic-gradient(var(--acc) 0%,var(--brd) 0%);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;flex-shrink:0;position:relative">
           <div style="width:42px;height:42px;border-radius:50%;background:var(--sfc);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;justify-content:center">
@@ -2187,6 +2259,7 @@ window.onerror=function(msg,src,line,col,err){
 var S={user:null,appStart:null,week:1,routine:null,macros:null,tdee:null,
   setsLog:{},weightUsed:{},trainLog:{},macroLog:{},stepsLog:{},
   bodyLog:[],savedMeals:[],streak:0,restConf:90,rmLog:{},normalWeekHist:{},
+  rutinaActiva:'normal',
   pro:null,proLog:{},proWeights:{},proHist:{},proTrainLog:{},proSessionHist:[],
   mastLog:{},mastWeights:{},mastTrainLog:{},mastHist:{},mastWeekHist:{}};
 function saveS(){
@@ -4128,6 +4201,7 @@ document.addEventListener('input',function(e){if(['m-pi','m-ci','m-fi'].indexOf(
 // ═══════════════════════════════════════
 function renderResumen(){
   S.week=getWeekNum();
+  syncRutinaActivaBtns();
   var dates=S.appStart?getWeekDates():Array(7).fill(null);
   var ws0=dates[0],ws6=dates[6];
   document.getElementById('rs-wl').textContent=ws0&&ws6?ws0.getDate()+' '+MON[ws0.getMonth()]+' – '+ws6.getDate()+' '+MON[ws6.getMonth()]+' '+ws6.getFullYear():'Semana '+S.week;
@@ -4165,28 +4239,31 @@ function renderResumen(){
     });
   }
 
-  // ── RUTINA (normal + pro + máster) ───────────────────────────────
-  var trainedNormal=Object.keys(S.trainLog).filter(function(k){return k.indexOf('w'+S.week+'_')===0;}).length;
-  var plannedNormal=S.routine?S.routine.length:0;
-  var trainedPro=S.proTrainLog?Object.keys(S.proTrainLog).filter(function(k){return k.indexOf('w'+S.week+'_')===0;}).length:0;
-  var plannedPro=S.pro&&S.pro.plan?S.pro.plan.length:0;
-  var trainedMast=S.mastTrainLog?Object.keys(S.mastTrainLog).filter(function(k){return k.indexOf('w'+S.week+'_')===0;}).length:0;
-  var plannedMast=typeof MAST_PLAN!=='undefined'?MAST_PLAN.length:0;
-  var trained=trainedNormal+trainedPro+trainedMast;
-  var planned=plannedNormal+(plannedPro>0?plannedPro:0)+(plannedMast>0?plannedMast:0);
-  if(planned===0)planned=plannedNormal;
-  var entPct=planned>0?Math.round((trained/planned)*100):0;
+  // ── RUTINA — solo la rutina activa ───────────────────────────────
+  var ra = S.rutinaActiva || 'normal';
+  var trained, planned, lastSessName='Ninguna esta semana';
+  if(ra === 'pro') {
+    trained = S.proTrainLog ? Object.keys(S.proTrainLog).filter(function(k){return k.indexOf('w'+S.week+'_')===0;}).length : 0;
+    planned = S.pro && S.pro.plan ? S.pro.plan.length : 0;
+    if(S.pro && S.pro.plan){var lpi=-1;for(var pi=0;pi<planned;pi++){if(S.proTrainLog&&S.proTrainLog['w'+S.week+'_d'+pi])lpi=pi;}if(lpi>=0)lastSessName=S.pro.plan[lpi].name+' (Pro)';}
+  } else if(ra === 'master') {
+    trained = S.mastTrainLog ? Object.keys(S.mastTrainLog).filter(function(k){return k.indexOf('w'+S.week+'_')===0;}).length : 0;
+    planned = typeof MAST_PLAN!=='undefined' ? MAST_PLAN.length : 0;
+    if(typeof MAST_PLAN!=='undefined'){var lmi=-1;for(var mi=0;mi<planned;mi++){if(S.mastTrainLog&&S.mastTrainLog['w'+S.week+'_d'+mi])lmi=mi;}if(lmi>=0)lastSessName=MAST_PLAN[lmi].name+' (Máster)';}
+  } else {
+    trained = Object.keys(S.trainLog).filter(function(k){return k.indexOf('w'+S.week+'_')===0;}).length;
+    planned = S.routine ? S.routine.length : 0;
+    var lastSessIdx=-1;
+    for(var si=0;si<planned;si++){if(S.trainLog['w'+S.week+'_s'+si])lastSessIdx=si;}
+    if(lastSessIdx>=0&&S.routine)lastSessName=S.routine[lastSessIdx].name;
+  }
+  if(planned===0) planned=1;
+  var entPct=Math.round((trained/planned)*100);
   document.getElementById('rs-ent-comp').textContent=trained;
   document.getElementById('rs-ent-tot').textContent=planned;
   document.getElementById('rs-ent-pct').textContent=entPct+'%';
   document.getElementById('rs-ent-bar').style.width=Math.min(entPct,100)+'%';
   document.getElementById('rs-ent-bar').style.background=entPct>=80?'var(--acl)':'var(--acc)';
-  var lastSessName='Ninguna esta semana';
-  var lastSessIdx=-1;
-  for(var si=0;si<plannedNormal;si++){if(S.trainLog['w'+S.week+'_s'+si])lastSessIdx=si;}
-  if(lastSessIdx>=0&&S.routine)lastSessName=S.routine[lastSessIdx].name;
-  if(trainedPro>0&&S.pro&&S.pro.plan){var lpi=-1;for(var pi=0;pi<plannedPro;pi++){if(S.proTrainLog['w'+S.week+'_d'+pi])lpi=pi;}if(lpi>=0)lastSessName=S.pro.plan[lpi].name+' (Pro)';}
-  if(trainedMast>0&&typeof MAST_PLAN!=='undefined'){var lmi=-1;for(var mi=0;mi<plannedMast;mi++){if(S.mastTrainLog['w'+S.week+'_d'+mi])lmi=mi;}if(lmi>=0)lastSessName=MAST_PLAN[lmi].name+' (Máster)';}
   document.getElementById('rs-ultima-sess').textContent='Última sesión: '+lastSessName;
 
   // ── ESTADO GENERAL / SCORE ─────────────────────────────────────
@@ -4606,12 +4683,53 @@ function cerrarSesion(){
   if(wrap)wrap.style.display='block';
   obGo('ob-welcome');
 }
+function syncDesdeNube(silencioso){
+  if(!window._currentFbUid || !window._fbLoadData){
+    if(!silencioso) mostrarToastSync('Sin conexión con la nube');
+    return;
+  }
+  var btn = document.getElementById('sync-btn');
+  if(btn) btn.textContent = '☁️ ...';
+  window._fbLoadData(window._currentFbUid, function(cloudData){
+    if(btn) btn.textContent = '☁️ Sync';
+    if(cloudData && cloudData.user){
+      Object.assign(S, cloudData);
+      try{localStorage.setItem('gr9',JSON.stringify(S));}catch(e){}
+      if(typeof getWeekNum==='function') S.week=getWeekNum();
+      // Refrescar la pantalla actual
+      var screens=['resumen','pasos','macros','rutina','perfil'];
+      var renders={resumen:renderResumen,pasos:renderPasos,macros:renderMacros,rutina:renderSessions,perfil:renderPerfil};
+      screens.forEach(function(s){
+        var el=document.getElementById('scr-'+s);
+        if(el&&el.classList.contains('on')&&renders[s]) renders[s]();
+      });
+      if(!silencioso) mostrarToastSync('✓ Datos actualizados');
+    } else {
+      if(!silencioso) mostrarToastSync('Sin datos en la nube');
+    }
+  });
+}
+function mostrarToastSync(msg){
+  var t=document.getElementById('sync-toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='sync-toast';
+    t.style.cssText='position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(27,67,50,.97);color:#fff;font-size:12px;font-weight:700;padding:10px 18px;border-radius:20px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.3);transition:opacity .4s;white-space:nowrap';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg;
+  t.style.opacity='1';
+  clearTimeout(t._t);
+  t._t=setTimeout(function(){t.style.opacity='0';},2500);
+}
 function enterApp(keepWeek){
   var wrap=document.getElementById('onboarding-wrap');
   var app=document.getElementById('app');
   if(wrap)wrap.style.display='none';
   if(app){app.style.display='flex';}
   if(!keepWeek) S.week=getWeekNum();
+  // Sincronizar datos frescos de la nube silenciosamente al entrar
+  setTimeout(function(){ syncDesdeNube(true); }, 800);
 }
 
 function init(){
@@ -4650,6 +4768,30 @@ function togHistorial(){
   var open=b.style.display==='block';
   b.style.display=open?'none':'block';
   if(a)a.textContent=open?'▼':'▲';
+}
+function setRutinaActiva(ra){
+  S.rutinaActiva = ra;
+  saveS();
+  // Actualizar botones
+  var btns = {normal:'ra-btn-normal', pro:'ra-btn-pro', master:'ra-btn-master'};
+  Object.keys(btns).forEach(function(k){
+    var btn = document.getElementById(btns[k]);
+    if(!btn) return;
+    if(k === ra){
+      btn.style.background = k==='master'?'#C9961A':k==='pro'?'var(--pur)':'var(--acc)';
+      btn.style.borderColor = k==='master'?'#C9961A':k==='pro'?'var(--pur)':'var(--acc)';
+      btn.style.color = '#fff';
+    } else {
+      btn.style.background = 'var(--sfc)';
+      btn.style.borderColor = 'var(--brd)';
+      btn.style.color = 'var(--muted)';
+    }
+  });
+  renderResumen();
+}
+function syncRutinaActivaBtns(){
+  var ra = S.rutinaActiva || 'normal';
+  setRutinaActiva(ra);
 }
 function setModoRutina(modo,btn,silent){
   try{localStorage.setItem('gr9_modo',modo);}catch(e){}
