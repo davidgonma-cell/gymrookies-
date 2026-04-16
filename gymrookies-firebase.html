@@ -961,7 +961,7 @@ body{
     <!-- SELECTOR DE VISTA -->
     <div class="view-sel" id="view-sel">
       <button class="view-btn on-normal" id="vbtn-normal" onclick="setRutinaView('normal')">
-        🏋️ Normal
+        🏋️ Básica
       </button>
       <button class="view-btn" id="vbtn-pro" onclick="setRutinaView('pro')">
         ⭐ Pro
@@ -1944,7 +1944,7 @@ body{
         <div class="ct" style="margin-bottom:0">Estado semanal</div>
         <!-- Selector rutina activa -->
         <div style="display:flex;gap:4px">
-          <button id="ra-btn-normal" onclick="setRutinaActiva('normal')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--acc);background:var(--acc);color:#fff;touch-action:manipulation">Normal</button>
+          <button id="ra-btn-normal" onclick="setRutinaActiva('normal')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--acc);background:var(--acc);color:#fff;touch-action:manipulation">Básica</button>
           <button id="ra-btn-pro" onclick="setRutinaActiva('pro')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--brd);background:var(--sfc);color:var(--muted);touch-action:manipulation">Pro</button>
           <button id="ra-btn-master" onclick="setRutinaActiva('master')" style="padding:3px 7px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid var(--brd);background:var(--sfc);color:var(--muted);touch-action:manipulation">Máster</button>
         </div>
@@ -3613,8 +3613,6 @@ function setSex(s,b){selSex=s;}
 function setDays(d,b){selDays=d;}
 function setGoal(g,el){selGoal=g;}
 function generate(){guardarPlan();}
-function startOnboard(){tab('perfil');}
-
 
 
 // ═══════════════════════════════════════
@@ -4772,7 +4770,10 @@ function togHistorial(){
 function setRutinaActiva(ra){
   S.rutinaActiva = ra;
   saveS();
-  // Actualizar botones
+  _actualizarBotonesRutina(ra);
+  renderResumen();
+}
+function _actualizarBotonesRutina(ra){
   var btns = {normal:'ra-btn-normal', pro:'ra-btn-pro', master:'ra-btn-master'};
   Object.keys(btns).forEach(function(k){
     var btn = document.getElementById(btns[k]);
@@ -4787,11 +4788,10 @@ function setRutinaActiva(ra){
       btn.style.color = 'var(--muted)';
     }
   });
-  renderResumen();
 }
 function syncRutinaActivaBtns(){
-  var ra = S.rutinaActiva || 'normal';
-  setRutinaActiva(ra);
+  // Solo actualiza los botones — NO llama a renderResumen para evitar bucle
+  _actualizarBotonesRutina(S.rutinaActiva || 'normal');
 }
 function setModoRutina(modo,btn,silent){
   try{localStorage.setItem('gr9_modo',modo);}catch(e){}
@@ -5943,38 +5943,6 @@ function setMastLog(dayIdx, exIdx, setIdx, val) {
   initMastState();
   S.mastLog['w' + S.week + '_d' + dayIdx + '_e' + exIdx + '_s' + setIdx] = val;
   saveS();
-}
-
-// ── Renderizar tarjetas de sesión en pantalla Rutina ─────────────
-function renderMastSessions() {
-  initMastState();
-  var list = document.getElementById('mast-sess-list');
-  if (!list) return;
-  list.innerHTML = '';
-  MAST_PLAN.forEach(function(day, idx) {
-    var trained = !!(S.mastTrainLog && S.mastTrainLog['w' + S.week + '_d' + idx]);
-    var done = 0;
-    day.exercises.forEach(function(ex, ei) {
-      var allDone = true;
-      for (var s = 0; s < ex.sets; s++) {
-        var v = getMastLog(idx, ei, s);
-        if (!v || !v.done) { allDone = false; break; }
-      }
-      if (allDone) done++;
-    });
-    var pct = Math.round((done / day.exercises.length) * 100);
-    var div = document.createElement('div');
-    div.style.cssText = 'background:' + (trained ? 'rgba(201,150,26,.06)' : 'var(--sfc)') + ';border:1px solid ' + (trained ? 'rgba(201,150,26,.4)' : 'var(--brd)') + ';border-left:3px solid ' + (trained ? '#C9961A' : 'rgba(201,150,26,.4)') + ';border-radius:var(--r);padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh);transition:all .15s';
-    div.innerHTML = '<div style="display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;margin-bottom:4px">'
-      + '<div style="font-size:14px;font-weight:600;color:' + (trained ? '#C9961A' : 'var(--txt)') + '">' + day.name + '</div>'
-      + (trained ? '<span style="background:rgba(201,150,26,.15);color:#C9961A;font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px">✓ HECHA</span>'
-                 : pct > 0 ? '<span style="font-size:12px;font-weight:700;color:#C9961A">' + pct + '%</span>' : '')
-      + '</div>'
-      + '<div style="font-size:10px;color:var(--muted);font-weight:500;margin-bottom:5px">' + day.exercises.length + ' ejercicios · Rutina Máster</div>'
-      + '<div class="pb"><div class="pf" style="width:' + (trained ? 100 : pct) + '%;background:#C9961A"></div></div>';
-    div.addEventListener('click', (function(i) { return function() { if (_touchMoved) return; openMastSession(i); }; })(idx));
-    list.appendChild(div);
-  });
 }
 
 // ── Abrir sesión ─────────────────────────────────────────────────
