@@ -4179,7 +4179,7 @@ function doAI(){
     var t=calcIng(parsed);aiPend=Object.assign({},t,{description:text.slice(0,60)});
     showAIR(aiPend);btn.textContent='Calcular macros';btn.disabled=false;return;
   }
-  var GROQ_KEY='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';
+  var GROQ_KEY='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';
   var sysPrompt='Eres un nutricionista experto. El usuario describe una comida en lenguaje natural. Calcula los macronutrientes totales estimados. Responde UNICAMENTE con este JSON sin texto extra: {"description":"nombre breve","protein":numero,"carbs":numero,"fat":numero,"kcal":numero}';
   var body=JSON.stringify({model:'llama3-8b-8192',max_tokens:400,messages:[{role:'system',content:sysPrompt},{role:'user',content:text}]});
   fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},body:body})
