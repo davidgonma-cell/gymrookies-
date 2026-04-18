@@ -2,7 +2,7 @@
   "name": "GymRookies",
   "short_name": "GymRookies",
   "description": "Tu app de entrenamiento y seguimiento de rutinas",
-  "start_url": "/",
+  "start_url": "./index.html"
   "display": "standalone",
   "background_color": "#1B4332",
   "theme_color": "#1B4332",
